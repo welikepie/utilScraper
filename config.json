@@ -1,0 +1,23 @@
+{
+	"baseUrl" : ["https://twitter.com"],
+	"method" : "generic",
+	"eatTemp" : ["tr>td>font>font>strong","http://www.eatserver.co.uk/editor/menuProvider.php"],
+	"searches" : ["a","a"],
+	"finalSearch" : ["strong","h2"],
+	"writeToDB" : true,
+	"updateDB" : false,
+	"writeToFile" : false,
+	"repeat" : "00,00,30,00,00",
+	"recover" : true,
+	"db" : {
+		"host" : "welikepie.com",
+		"user" : "alex",
+		"pass" : "Sannevanwel1j",
+		"dbName" : "eatSoup",
+		"tName" : "dailySoup",
+		"columns" : ["thing","name"]
+	},
+	"retrieval" : {
+		"name" : "data.json"
+	}
+}
