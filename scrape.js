@@ -1,14 +1,51 @@
 var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 var cheerio = require('cheerio');
 var get = require('./config.json');
+get.db.addTimestamp = true;
 var mysql = require('mysql');
 var fs = require('fs');
 var diff;
 var timeStamp = 0;
+var thresh = 0;
 var absentConf;
 if (get.writeToDB == true) {
-	if (get.finalSearch.length != get.db.columns.length) {
-		console.log("search paramaters not equal to column parameters");
+//	if (get.finalSearch.length != get.db.columns.length) {
+//		console.log("search paramaters not equal to column parameters");
+//		process.exit(1);
+//	}
+}
+
+
+
+if(get.updateDB == true){
+	if("threshold" in get == false){
+		console.log("Threshold not specified.");
+		process.exit(1);
+	}
+	else{
+		var test = get.threshold.split(",");
+		for (var i = test.length - 1; i >= 0; i--) {
+			if (i == test.length - 1) {
+				thresh += parseInt(test[i], 10);
+			} else if (i == test.length - 2) {
+				thresh += parseInt(test[i], 10) * 1000;
+			} else if (i == test.length - 3) {
+				thresh += parseInt(test[i], 10) * 60000;
+			} else if (i == test.length - 4) {
+				thresh += parseInt(test[i], 10) * 60000 * 60;
+			} else if (i == test.length - 5) {
+				thresh += parseInt(test[i], 10) * 60000 * 60 * 24;
+			}
+		}
+	}
+	if("updateColumn" in get.db){
+		if(get.db.updateColumn.length <= 0){
+			console.log("Table column to update against is not specified adequately.");
+			process.exit(1);		
+		}
+	}
+	else{
+		console.log("Table column to update against is missing.");
 		process.exit(1);
 	}
 }
@@ -29,10 +66,11 @@ for (var i = diff.length - 1; i >= 0; i--) {
 }
 console.log(timeStamp);
 var connection = mysql.createConnection({
-	host : get.db.host,
-	user : get.db.user,
-	password : get.db.pass,
-	database : get.db.dbName
+	"host" : get.db.host,
+	"user" : get.db.user,
+	"password" : get.db.pass,
+	"database" : get.db.dbName
+
 });
 
 if (get.writeToDB == "true") {
@@ -53,6 +91,7 @@ setInterval(function() {
 function timed() {
 	absentConf = fs.existsSync('numTracker.json');
 	console.log(absentConf);
+	
 	if (absentConf == true && get.recover == true) {
 		console.log("Didn't finish eating last time around!");
 		var encode = JSON.parse(fs.readFileSync("numTracker.json","utf-8"));
@@ -171,9 +210,48 @@ function writingToEndPoint(startFrom) {
 	console.log('Spider digesting and saving progress.');
 	var links = JSON.parse(fs.readFileSync("links.json","utf-8"));
 	links = links.data;
-	console.log(links.length);
-	console.log(startFrom);
-	console.log(links.length-startFrom);
+	var linkArr = [];
+	var linkArr = [];
+	
+	if(startFrom == 0 && get.updateDB == true && get.addTimestamp == true){
+		var toRemove = [];
+		var newArr = [];
+		var toUpdate = [];
+		var time = [];
+		var sql = "SELECT "+get.db.columns[get.db.columns.length - 1]+",timestamp FROM"+ get.db.table +"ORDER BY `timestamp` ASC";
+		connection.query(sql, function(err, results) {
+			console.log("SQLING STUFF");
+			if (err != undefined) {
+				console.log(err);
+			}
+			if(results.length > 0){
+				for(var k = 0; k < results.length; k++){
+					if(links.indexOf(results[k][get.db.columns[get.db.columns.length - 1]]) == -1){
+						toRemove.push(results[k][get.db.columns[get.db.columns.length - 1]]);
+					}
+					time.push(results[k].timestamp);
+					linkArr.push(results[k][get.db.columns[get.db.columns.length - 1]]);
+				}
+				for(var k = 0; k < link.length; k++){
+					if(linkArr.indexOf(link[k]) != -1){
+						if(threshold < new Date().getTime() - time[k]){
+							toUpdate.push(link[k]);	
+						}
+					}
+					else{
+						newArr.push(link[k]);
+					}
+				}
+			}
+			links = eliminateDuplicates(newArr.concat(toUpdate));	
+			for(var k = 0; k < toRemove.length; k++){
+				var sql = "DELETE * FROM "+get.db.table+" WHERE "+get.db.columns[get.db.columns.length - 1]+" = "+reRemove[k];
+				connection.query(sql, function(err, results) {
+				if(err != undefined){throw err;}
+				});								
+			}
+		});
+	}
 	for (var l = 0; l < (links.length-startFrom); l++) {
 		var text = requester(links[l+startFrom]);
 		$ = cheerio.load(text);
@@ -199,15 +277,15 @@ function writingToEndPoint(startFrom) {
 		//					console.log($());
 		if (get.writeToDB == true) {
 			if(resultString != ""){
-				writeToDb(connection.escape(connection.escape(resultString),links[l+startFrom]));
+				writeToDb(connection.escape(resultString)+","+connection.escape(links[l+startFrom]));	
 			}
 			//writeToDB();
 		}
 		fs.writeFileSync("numTracker.json", '{"data":' + (l+startFrom) + '}');
-		console.log("Wrapping in silk at "+100*(l/(links.length-startFrom))+" percent.");
+		console.log("Wrapping in silk. "+Math.floor(100*(l/(links.length-startFrom)))+" % done.");
 	}
-	//fs.unlinkSync('numTracker.json');
-	//fs.unlinkSync('links.json');
+	fs.unlinkSync('numTracker.json');
+	fs.unlinkSync('links.json');
 }
 
 
@@ -233,18 +311,27 @@ function writeToDb(data) {
 	console.log("DATA");
 	console.log(data);
 	var string = "";
-	for (var i = 0; get.db.columns.length; i++) {
+	for (var i = 0; i < get.db.columns.length; i++) {
 		if (string.length > 0) {
 			string += ",";
 		}
-		string += get.db.columns["i"];
+		string += get.db.columns[i];
 	}
-	var sql = "INSERT INTO " + get.db.tName + " (" + string + ")VALUES (" + data + ")"
-//	connection.query(sql, function(err, results) {
-//		if (err != undefined) {
-//			console.log(err);
-//		}
-//	});
+	console.log(string);
+	if(get.db.addTimestamp == true){
+		var sql = "INSERT INTO " + get.db.tName + " (" + string + ",timestamp) VALUES (" + data + ","+new Date().getTime()+")";		
+	}
+	else{
+		var sql = "INSERT INTO " + get.db.tName + " (" + string + ") VALUES (" + data + ")";
+	}
+	console.log(sql);
+	connection.query(sql, function(err, results) {
+		console.log("happening");
+		if (err != undefined) {
+			console.log(err);
+		}
+		console.log(results);
+	});
 }
 
 function eliminateDuplicates(arr) {
