@@ -64,7 +64,7 @@ for (var i = diff.length - 1; i >= 0; i--) {
 		timeStamp += parseInt(diff[i], 10) * 60000 * 60 * 24;
 	}
 }
-console.log(timeStamp);
+console.log("Time until repeat: "+ timeStamp/1000/60+" minutes.");
 var connection = mysql.createConnection({
 	"host" : get.db.host,
 	"user" : get.db.user,
@@ -74,14 +74,14 @@ var connection = mysql.createConnection({
 });
 
 if (get.writeToDB == "true") {
-	connection.query("TRUNCATE TABLE " + get.db.tName + " ;");
+	//connection.query("TRUNCATE TABLE " + get.db.tName + " ;");
 	console.log(get.db.tName + " truncated.");
 }
 function dropTable() {
 	connection.query("TRUNCATE TABLE " + get.db.tName + " ;");
 }
 
-console.log("Hatching");
+console.log("Hatching spiderlings.");
 timed();
 
 setInterval(function() {
@@ -90,8 +90,7 @@ setInterval(function() {
 
 function timed() {
 	absentConf = fs.existsSync('numTracker.json');
-	console.log(absentConf);
-	
+	console.log("Scraping interrupted : "+absentConf);
 	if (absentConf == true && get.recover == true) {
 		console.log("Didn't finish eating last time around!");
 		var encode = JSON.parse(fs.readFileSync("numTracker.json","utf-8"));
@@ -117,16 +116,29 @@ function timed() {
 }
 
 function carryOn(thing, base) {
-	console.log("Growing Legs.");
+	console.log("Scurrying.");
 	$ = cheerio.load(thing);
-	var resultsArr = $(get.searches[0].replace(/>/g, " "));
-	//console.log(resultsArr);
-	for (var k = 1; k <= get.searches.length; k++) {
+	var resultLength = parseElements(get.searches[0]);
+	var resultsArr = [];
+	for(var i = 0; i < resultLength.length; i++){
+		var returned = $(resultLength[i].replace(/>/g, " "));
+		for(var a = 0; a < returned.length; a++){
+			resultsArr.push(returned[a]);
+			//console.log(returned[a]);
+		}
+	}
+//	resultsArr = eliminateDuplicates(resultsArr);
+//	console.log(resultsArr);
+	for (var k = 0; k <= get.searches.length; k++) {
 		if (get.method == "generic") {
 			if (k < get.searches.length) {
 				var tempResults = [];
 				for (var l = 0; l < resultsArr.length; l++) {
-					var test = resultsArr[l].attribs.href;
+					if(k == 0){var test = resultsArr[l].attribs.href;}
+					if(k > 0){
+						test = resultsArr[l];
+					}
+		
 					if (test != undefined && test != "") {
 						var match = base.match(/[.a-z0-9A-Z]*/g)[4];
 						if (test.indexOf(match) == -1) {
@@ -147,10 +159,17 @@ function carryOn(thing, base) {
 				console.log("Starting to crawl.");
 				resultsArr = [];
 				for (var l = 0; l < tempResults.length; l++) {
-					var text = requester(tempResults[l])
+					var text = requester(tempResults[l]);
 					$ = cheerio.load(text);
 					console.log("Hunting " + tempResults[l] + ".");
-					var tempArr = $(get.searches[k].replace(/>/g, " "));
+					var parsed = parseElements(get.searches[k]);
+					var tempArr = [];
+					for(var z = 0; z < parsed.length; z++){
+						var returned = $(parsed[z].replace(/>/g, " "));
+						for(var b = 0; b < returned.length; b++){
+							tempArr.push(returned[b]);
+						}
+					}
 					if (tempArr.length == 0 || tempArr == "") {
 						console.log("Prey " + tempResults[l] + " yielded no results.");
 					}
@@ -172,17 +191,20 @@ function carryOn(thing, base) {
 							resultsArr.push(match);
 						}
 					}
-					console.log(Math.floor(100 * (l / tempResults.length)) + " % completed of pass " + k + " of " + (get.searches.length - 1) + ".");
+					console.log(Math.floor(100 * ((l+1) / tempResults.length)) + " % completed of pass " + (k+1) + " of " + (get.searches.length) + ".");
 				}
 			} else if (k == get.searches.length) {
-				console.log(get.preserve);
-				resultsArr = eliminateDuplicates(resultsArr);
-				if (get.baseUrl.indexOf(base) > 0) {
-					var linkJson = JSON.parse(fs.readlinkSync('links.json'));
-					fs.writeFileSync("links.json", '{"data":' + eliminateDuplicates(linkJson.data.concat(resultsArr)) + "}");
-				} else {
-					fs.writeFileSync("links.json", '{"data":' + JSON.stringify(resultsArr) + "}");
-				}
+				//console.log(get.preserve);
+				console.log(resultsArr);
+				//resultsArr = eliminateDuplicates(resultsArr);
+				//if (get.baseUrl.indexOf(base) > 0) {
+				//	var linkJson = JSON.parse(fs.readlinkSync('links.json'));
+				//	fs.writeFileSync("links.json", '{"data":' + eliminateDuplicates(linkJson.data.concat(resultsArr)) + "}");
+				//} else {
+	//				console.log("writing this tree");
+//					console.log(resultsArr);
+					fs.writeFileSync("links.json", '{"data":'+JSON.stringify(eliminateDuplicates(resultsArr))+'}');
+				//}
 			}
 
 		} else if (get.method == "eat" && k == get.searches.length) {
@@ -203,64 +225,33 @@ function carryOn(thing, base) {
 			}
 		}
 	}
-
 }
 
 function writingToEndPoint(startFrom) {
+	if(get.clearDB == true){
+		asyncLoop(1,function(loop){cleanDB(startFrom); loop.next()},function(){"cleaned"});
+	}
 	console.log('Spider digesting and saving progress.');
 	var links = JSON.parse(fs.readFileSync("links.json","utf-8"));
 	links = links.data;
-	var linkArr = [];
-	var linkArr = [];
-	
-	if(startFrom == 0 && get.updateDB == true && get.addTimestamp == true){
-		var toRemove = [];
-		var newArr = [];
-		var toUpdate = [];
-		var time = [];
-		var sql = "SELECT "+get.db.columns[get.db.columns.length - 1]+",timestamp FROM"+ get.db.table +"ORDER BY `timestamp` ASC";
-		connection.query(sql, function(err, results) {
-			console.log("SQLING STUFF");
-			if (err != undefined) {
-				console.log(err);
-			}
-			if(results.length > 0){
-				for(var k = 0; k < results.length; k++){
-					if(links.indexOf(results[k][get.db.columns[get.db.columns.length - 1]]) == -1){
-						toRemove.push(results[k][get.db.columns[get.db.columns.length - 1]]);
-					}
-					time.push(results[k].timestamp);
-					linkArr.push(results[k][get.db.columns[get.db.columns.length - 1]]);
-				}
-				for(var k = 0; k < link.length; k++){
-					if(linkArr.indexOf(link[k]) != -1){
-						if(threshold < new Date().getTime() - time[k]){
-							toUpdate.push(link[k]);	
-						}
-					}
-					else{
-						newArr.push(link[k]);
-					}
-				}
-			}
-			links = eliminateDuplicates(newArr.concat(toUpdate));	
-			for(var k = 0; k < toRemove.length; k++){
-				var sql = "DELETE * FROM "+get.db.table+" WHERE "+get.db.columns[get.db.columns.length - 1]+" = "+reRemove[k];
-				connection.query(sql, function(err, results) {
-				if(err != undefined){throw err;}
-				});								
-			}
-		});
-	}
+
 	for (var l = 0; l < (links.length-startFrom); l++) {
 		var text = requester(links[l+startFrom]);
 		$ = cheerio.load(text);
 		var resultString = "";
 		for (var m = 0; m < get.finalSearch.length; m++) {
-			var results = $(get.finalSearch[m].replace(/>/g, " "));
+			var patternArr = parseElements(get.finalSearch[m]);
+			var results = [];
+			for(var z = 0; z < patternArr.length; z++){
+				var temp = $(patternArr[z].replace(/>/g, " "));
+				for(var y = 0; y < temp.length; y++){
+					results.push(temp[y]);
+				}
+			}
+			//results = eliminateDuplicates(results);
 			//console.log(results);
 			for(var n = 0; n < results.length; n++){
-				//console.log(n);
+				//console.log(results[n]);
 				//console.log(results[n].children[0].data);
 				if("children" in results[n] && results[n].children.length > 1){
 					if("data" in results[n].children[0]){
@@ -282,12 +273,11 @@ function writingToEndPoint(startFrom) {
 			//writeToDB();
 		}
 		fs.writeFileSync("numTracker.json", '{"data":' + (l+startFrom) + '}');
-		console.log("Wrapping in silk. "+Math.floor(100*(l/(links.length-startFrom)))+" % done.");
+		console.log("Wrapping in silk at "+Math.floor(100*((l + startFrom)/links.length))+"% completion. "+(links.length-(l+startFrom))+" links remaining.");
 	}
 	fs.unlinkSync('numTracker.json');
 	fs.unlinkSync('links.json');
 }
-
 
 function requester(url) {
 	var xmlhttp = new XMLHttpRequest();
@@ -308,8 +298,8 @@ function requester(url) {
 }
 
 function writeToDb(data) {
-	console.log("DATA");
-	console.log(data);
+	console.log("Writing information to database.");
+//	console.log(data);
 	var string = "";
 	for (var i = 0; i < get.db.columns.length; i++) {
 		if (string.length > 0) {
@@ -317,21 +307,75 @@ function writeToDb(data) {
 		}
 		string += get.db.columns[i];
 	}
-	console.log(string);
+	//console.log(string);
 	if(get.db.addTimestamp == true){
 		var sql = "INSERT INTO " + get.db.tName + " (" + string + ",timestamp) VALUES (" + data + ","+new Date().getTime()+")";		
 	}
 	else{
 		var sql = "INSERT INTO " + get.db.tName + " (" + string + ") VALUES (" + data + ")";
 	}
-	console.log(sql);
+	
+	sql += " ON DUPLICATE KEY UPDATE ";
+	var dataSplit = data.replace(/" "/g,"").replace(/','/g, "'|'");
+	for(var z = 0; z < string.split(",").length; z++){
+		sql += string.split(",")[z];
+		sql += " = "+dataSplit.split("|")[z];
+		if(z < string.split(",").length - 1){
+			sql+=",";
+		}
+	}
+	if(get.db.addTimestamp == true){
+		sql += ", timestamp = "+new Date().getTime();
+	}
+//	console.log(sql);
+	var pushed = false;
+//	while(pushed == false){
+//		console.log("entered");
+	asyncLoop(1,function(loop){
 	connection.query(sql, function(err, results) {
-		console.log("happening");
 		if (err != undefined) {
 			console.log(err);
+			return;
 		}
 		console.log(results);
-	});
+		});
+	loop.next();
+	}
+	,function(){console.log("Written")});
+	//}
+	//pushed = false;
+}
+
+function asyncLoop(iterations, func, callback) {
+    var index = 0;
+    var done = false;
+    var loop = {
+        "next": function() {
+            if (done) {
+                return;
+            }
+
+            if (index < iterations) {
+                index++;
+                func(loop);
+
+            } else {
+                done = true;
+                callback();
+            }
+        },
+
+        "iteration": function() {
+            return index - 1;
+        },
+
+        "break": function() {
+            done = true;
+            callback();
+        }
+    };
+    loop.next();
+    return loop;
 }
 
 function eliminateDuplicates(arr) {
@@ -360,7 +404,7 @@ function writeToFile() {
 		if (err != undefined) {
 			console.log(err);
 		}
-		console.log(results);
+//		console.log(results);
 		resultObj = JSON.stringify(results);
 		resultObj = resultObj.replace(/\\n/g, "");
 		fs.writeFile(get.retrieval.name, resultObj, function(err) {
@@ -372,4 +416,137 @@ function writeToFile() {
 
 	});
 
+}
+
+
+
+function parseElements(input){
+	//console.log(input);
+	if(typeof(input)!="string"){throw "Input is of invalid type.";}
+	var string = input.replace(/\s/g, '');
+	var array = string.split(">");
+	//console.log(array);
+	var sortedArr = [];
+	var finalArr = [];
+	var foundVar = -1;
+	for(var i = 0; i < array.length; i++){		
+		if(array[i].indexOf("(")!=-1){
+			foundVar = i;
+			var str = "";
+		}
+		if(foundVar == -1){
+			sortedArr.push(array[i]);
+		}
+		
+		if(array[i].indexOf(")")!=-1){
+			for(var k = foundVar; k <= i; k++){
+				if(k > foundVar){
+					str +=">";
+				}
+					str += array[k];	
+				}
+				sortedArr.push(str);
+			foundVar = -1;
+		}
+	}
+	//previous segment splits via >, and then re-merges segments which have () in them.
+	for(var i = 0; i < sortedArr.length; i++){
+		if(sortedArr[i].indexOf("(")!=-1){
+			var newString = "";
+			for(var k = 0; k <= i; k++){
+				//console.log("()"+sortedArr[k]);
+				if(k > 0){
+					newString += ">";
+				}
+				if (k == i){
+					var regexMatch = sortedArr[i].match(/\(.*?\)/);
+					newString += regexMatch[0].substring(1,regexMatch[0].length-1); 
+					
+				}
+				if(k < i){
+					newString += sortedArr[k]; 
+				}
+			}
+			finalArr.push(newString);
+			sortedArr[i]=sortedArr[i].split("+")[1];
+		}
+		if(i == sortedArr.length-1){
+			var newString = "";
+			for(var i = 0; i < sortedArr.length; i++){
+				if(i > 0){
+					newString += ">";
+				}
+				newString += sortedArr[i];
+			}
+			finalArr.push(newString);
+			//write all of this as a pattern and push to finalArr.
+		}
+		
+	}
+	if(finalArr.length > 0){
+		return finalArr;
+	}	
+	else{
+		throw "Pattern is of unparseable type.";
+	}
+//	process.exit(1);
+}
+function cleanDB(startFrom){
+	if(startFrom == 0 && get.updateDB == true && get.db.addTimestamp == true){
+		var links = JSON.parse(fs.readFileSync("links.json","utf-8"));
+	links = links.data;
+		console.log("Cleaning the web.");
+			var linkArr = [];
+		var toRemove = [];
+		var newArr = [];
+		var toUpdate = [];
+		var time = [];
+		var sql = "SELECT "+get.db.columns[get.db.columns.length - 1]+",timestamp FROM "+ get.db.tName +" ORDER BY `timestamp` ASC";
+		asyncLoop(1,function(loop){connection.query(sql, function(err, results) {
+			//console.log("SQLING STUFF");
+			if (err != undefined) {
+				console.log(err);
+				return;
+			}
+			if(results.length > 0){
+				for(var k = 0; k < results.length; k++){
+					if(get.baseUrl.indexOf(results[k][get.db.columns[get.db.columns.length - 1]])==-1||links.indexOf(results[k][get.db.columns[get.db.columns.length - 1]]) == -1){
+						//console.log(results[k]);
+						toRemove.push(results[k][get.db.columns[get.db.columns.length - 1]]);
+					}
+					time.push(results[k].timestamp);
+					linkArr.push(results[k][get.db.columns[get.db.columns.length - 1]]);
+				}
+				for(var k = 0; k < links.length; k++){
+					if(linkArr.indexOf(links[k]) != -1){
+						if(get.threshold < new Date().getTime() - time[k]){
+							toUpdate.push(link[k]);	
+						}
+					}
+					else{
+						newArr.push(link[k]);
+					}
+				}
+			}
+			links = eliminateDuplicates(newArr.concat(toUpdate));	
+			for(var k = 0; k < toRemove.length; k++){
+				var sql = "DELETE FROM "+get.db.tName+" WHERE "+get.db.columns[get.db.columns.length - 1]+" = \""+toRemove[k]+"\"";
+					//console.log(sql);
+					asyncLoop(1,function(loop){
+					connection.query(sql, function(err, results) {
+						if (err != undefined) {
+							console.log(err);
+							return;
+						}
+						//console.log(results);
+						});
+					loop.next();
+					}
+					,function(){console.log("Deleted")});
+												
+			}
+		loop.next();
+		})}
+		,function(){console.log("Deleted all.")});
+	}
 }
