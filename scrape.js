@@ -110,16 +110,13 @@ function huntLinks(j) {
 
 		if (!error && response.statusCode == 200) {
 			// console.log(body) // Print the web page.
-			carryOn(body, get.baseUrl[j],j);
+			carryOn(body, get.baseUrl[j], j);
 			console.log(get.baseUrl[j]);
 		} else {
-			console.log("\033[31m A spider got lost! Error " + error + " with a code " + response.statusCode+'\033[0m');
+			console.log("\033[31m A spider got lost! Error " + error + " with a code " + response.statusCode + '\033[0m');
 		}
 
 	})
-	
-	
-	
 }
 
 function carryOn(thing, base, baseLength) {
@@ -137,18 +134,19 @@ function carryOn(thing, base, baseLength) {
 	//	resultsArr = eliminateDuplicates(resultsArr);
 	//	console.log(resultsArr);
 	//	for (var k = 0; k <= get.searches.length; k++) {
-		dataScrape(base,0,resultsArr);
-		
+	dataScrape(base, 0, resultsArr);
+
 }
-function dataScrape(base,k,resultsArr){
-	{
-		console.log("k index : "+k);
-		if (get.method == "generic") {
-			if (k < get.searches.length) {
+
+function dataScrape(base, k, referenceArr) { {
+		//console.log(resultsArr);
+		console.log("k index : " + k);
+		if (get.method == "generic" || get.method == "asos") {
+			if (k < get.searches.length - 1) {
 				var tempResults = [];
-				for (var l = 0; l < resultsArr.length; l++) {
+				for (var l = 0; l < referenceArr.length; l++) {
 					if (k == 0) {
-						var test = resultsArr[l].attribs.href;
+						var test = referenceArr[l].attribs.href;
 					}
 					if (k > 0) {
 						test = resultsArr[l];
@@ -173,20 +171,27 @@ function dataScrape(base,k,resultsArr){
 				console.log("Starting to crawl.");
 				resultsArr = [];
 				//console.log(tempResults);
-				asyncLoop(tempResults.length, function(loop) {
+				asyncLoop(tempResults.length - 1, function(loop) {
 					//				for (var l = 0; l < tempResults.length; l++) {
 					//var text = requester(tempResults[l]);
 					//console.log(tempResults[loop.index]);
+					console.log(loop.index);
+					if(get.method == "asos"){
+						tempResults[loop.index] = tempResults[loop.index]+"&parentID=-1&pge=0&pgeSize=9999&sort=-1";
+					}
 					request(tempResults[loop.index], function(error, response, body) {
 						if (!error && response.statusCode == 200) {
 							var text = body;
 							$ = cheerio.load(text);
 							console.log("Hunting " + tempResults[loop.index] + ".");
-							var parsed = parseElements(get.searches[k]);
+							var parsed = parseElements(get.searches[k + 1]);
+							console.log(parsed);
 							var tempArr = [];
 							for (var z = 0; z < parsed.length; z++) {
 								var returned = $(parsed[z].replace(/>/g, " "));
+								//console.log(returned);
 								for (var b = 0; b < returned.length; b++) {
+									//console.log(returned[b]);
 									tempArr.push(returned[b]);
 								}
 							}
@@ -208,38 +213,43 @@ function dataScrape(base,k,resultsArr){
 										}
 										match = test;
 									}
+									//console.log(match);
 									resultsArr.push(match);
 								}
 							}
 							loop.next();
-							console.log('\033[35m'+Math.floor(100 * ((loop.index + 1) / tempResults.length)) + " % completed of pass " + (k + 1) + " of " + (get.searches.length) + ".\033[0m");
+							//console.log(resultsArr);
+							console.log('\033[35m' + Math.floor(100 * ((loop.index + 1) / tempResults.length)) + " % completed of pass " + (k + 1) + " of " + (get.searches.length - 1) + ". "+resultsArr.length+" results."+"\033[0m");
 
 						} else {
 							//console.log(tempResults);
-							console.log("\033[31m A spider got lost! Error " + error + " with a code " + response.statusCode+'\033[0m');
+							console.log("\033[31m A spider got lost! Error " + error + " with a code " + response.statusCode + '\033[0m');
 							loop.next();
 						}
-						if(loop.index+1 == tempResults.length){
-							var pushk = k+1
-							dataScrape(base,pushk,tempResults);
+						if (loop.index == tempResults.length - 1) {
+							var pushk = k + 1;
+							dataScrape(base, pushk, resultsArr);
 						}
 
 					})
 				}, function() {
 				});
-			} else if (k == get.searches.length) {
-			 //console.log(get.preserve);
-			 console.log(resultsArr);
-			 resultsArr = eliminateDuplicates(resultsArr);
-			 //if (get.baseUrl.indexOf(base) > 0) {
-			 //	var linkJson = JSON.parse(fs.readlinkSync('links.json'));
-			 //	fs.writeFileSync("links.json", '{"data":' + eliminateDuplicates(linkJson.data.concat(resultsArr)) + "}");
-			 //} else {
-			 //				console.log("writing this tree");
-			 //					console.log(resultsArr);
-			 fs.writeFileSync("links.json", '{"data":' + JSON.stringify(eliminateDuplicates(resultsArr)) + '}');
-			 	writingToEndPoint(0);
-			 }
+			} else if (k == get.searches.length - 1) {
+				//console.log(referenceArr);
+				console.log("finished");
+				//console.log(get.preserve);
+				// console.log(resultsArr);
+				//resultsArr = eliminateDuplicates(resultsArr);
+				//if (get.baseUrl.indexOf(base) > 0) {
+				//	var linkJson = JSON.parse(fs.readlinkSync('links.json'));
+				//			 fs.writeFileSync("links.json", '{"data":' + eliminateDuplicates(linkJson.data.concat(resultsArr)) + "}");
+				//} else {
+				//				console.log("writing this tree");
+				//					console.log(resultsArr);
+				fs.writeFileSync("links.json", '{"data":' + JSON.stringify(eliminateDuplicates(resultsArr)) + '}');
+				writingToEndPoint(0);
+
+			}
 
 		} else if (get.method == "eat" && k == get.searches.length) {
 			if (get.writeToDB == "true") {
@@ -258,7 +268,6 @@ function dataScrape(base,k,resultsArr){
 				}
 			}
 		}
-	
 	}
 }
 
@@ -270,52 +279,99 @@ function writingToEndPoint(startFrom) {
 		}, function() {"cleaned"
 		});
 	}
-	console.log('Spider digesting and saving progress.');
+	console.log('Spider digesting and loading progress.');
 	var links = JSON.parse(fs.readFileSync("links.json", "utf-8"));
 	links = links.data;
 	console.log("file loaded");
 	//for (var l = 0; l < (links.length - startFrom); l++) {
-	var start = links.length-startFrom;
+	var start = links.length - startFrom;
 	console.log(start);
-	asyncLoop(start,function(loop){
+	asyncLoop(start, function(loop) {
 		var l = loop.index;
+		console.log(l);
 		request(links[l], function(error, response, body) {
 			if (!error && response.statusCode == 200) {
+				//console.log(body);
 				// console.log(body) // Print the web page.
-				console.log("success");
+				//console.log("success");
 				var text = body;
 				$ = cheerio.load(text);
 				var resultString = "";
 				for (var m = 0; m < get.finalSearch.length; m++) {
 					var patternArr = parseElements(get.finalSearch[m]);
+					console.log(patternArr);
 					var results = [];
 					for (var z = 0; z < patternArr.length; z++) {
 						var temp = $(patternArr[z].replace(/>/g, " "));
+						//console.log($._root.children);
 						for (var y = 0; y < temp.length; y++) {
 							results.push(temp[y]);
 						}
 					}
 					//results = eliminateDuplicates(results);
-					//console.log(results);
+					//console.log(results[0].children);
 					for (var n = 0; n < results.length; n++) {
 						//console.log(results[n]);
 						//console.log(results[n].children[0].data);
-						if ("children" in results[n] && results[n].children.length > 1) {
+						if ("children" in results[n] && results[n].children.length > 0) {
 							if ("data" in results[n].children[0]) {
-								if (results[n].children[0].data != "") {
+							
 									if (resultString.length > 0 && resultString[resultString.length - 1] != ",") {
 										resultString += ",";
 									}
 									resultString += results[n].children[0].data;
-								}
+									console.log(results[n].children[0].data);
+								
 							}
 						}
 					}
 				}
-									console.log(resultString);
+				console.log(resultString);
 				if (get.writeToDB == true) {
+					console.log("happening");
 					if (resultString != "") {
-						writeToDb(connection.escape(resultString) + "," + connection.escape(links[l + startFrom]));
+						//	writeToDb(connection.escape(resultString) + "," + connection.escape(links[l + startFrom]));
+
+						console.log("Writing information to database.");
+						//	console.log(data);
+						var string = "";
+						for (var i = 0; i < get.db.columns.length; i++) {
+							if (string.length > 0) {
+								string += ",";
+							}
+							string += get.db.columns[i];
+						}
+						//console.log(string);
+						resultString = connection.escape(resultString)+","+connection.escape(links[loop.index]);
+						if (get.db.addTimestamp == true) {
+							var sql = "INSERT INTO " + get.db.tName + " (" + string + ",timestamp) VALUES (" + resultString + "," + new Date().getTime() + ")";
+						} else {
+							var sql = "INSERT INTO " + get.db.tName + " (" + string + ") VALUES (" + resultString +")";
+						}
+
+						sql += " ON DUPLICATE KEY UPDATE ";
+						var dataSplit = resultString.replace(/" "/g, "").replace(/','/g, "'|'");
+						for (var z = 0; z < string.split(",").length; z++) {
+							sql += string.split(",")[z];
+							sql += " = " + dataSplit.split("|")[z];
+							if (z < string.split(",").length - 1) {
+								sql += ",";
+							}
+						}
+						if (get.db.addTimestamp == true) {
+							sql += ", timestamp = " + new Date().getTime();
+						}
+						console.log("\033[31m" + sql + "\033[0m" + "\n");
+
+						connection.query(sql, function(err, results) {
+							if (err != undefined) {
+								console.log(err);
+								return;
+							}
+							console.log(results);
+						});
+						//loop.next();
+
 					}
 					//writeToDB();
 				}
@@ -324,12 +380,12 @@ function writingToEndPoint(startFrom) {
 			} else {
 				console.log("A spider got lost! Error " + error + " with a code " + response.statusCode);
 			}
-
+			loop.next();
 		})
-		loop.next();
-	},function(){});
-	//fs.unlinkSync('numTracker.json');
-	//fs.unlinkSync('links.json');
+	}, function() {
+	fs.unlinkSync('numTracker.json');
+	fs.unlinkSync('links.json');
+	});
 }
 
 function requester(url) {
@@ -390,7 +446,7 @@ function writeToDb(data) {
 	if (get.db.addTimestamp == true) {
 		sql += ", timestamp = " + new Date().getTime();
 	}
-	console.log("\033[31m"+sql+"\033[0m"+"\n");
+	console.log("\033[31m" + sql + "\033[0m" + "\n");
 	var pushed = false;
 	asyncLoop(1, function(loop) {
 		connection.query(sql, function(err, results) {
@@ -412,7 +468,7 @@ function asyncLoop(iterations, func, callback) {
 	var index = 0;
 	var done = false;
 	var loop = {
-		"index" : index - 1,
+		"index" : 0,
 		"next" : function() {
 			if (done) {
 				return;
@@ -557,11 +613,10 @@ function parseElements(input) {
 
 function cleanDB(startFrom) {
 	if (startFrom == 0 && get.updateDB == true && get.db.addTimestamp == true) {
-		if(fs.existsSync('links.json')){
+		if (fs.existsSync('links.json')) {
 			var links = JSON.parse(fs.readFileSync("links.json", "utf-8"));
 			links = links.data;
-		}
-		else{
+		} else {
 			links = "";
 		}
 		console.log("Cleaning the web.");
