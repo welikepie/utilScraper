@@ -177,7 +177,7 @@ function dataScrape(base, k, referenceArr) { {
 					//console.log(tempResults[loop.index]);
 					console.log(loop.index);
 					if(get.method == "asos"){
-						tempResults[loop.index] = tempResults[loop.index]+"&parentID=-1&pge=0&pgeSize=9999&sort=-1";
+						//tempResults[loop.index] = tempResults[loop.index]+"&parentID=-1&pge=0&pgeSize=9999&sort=-1";
 					}
 					request(tempResults[loop.index], function(error, response, body) {
 						if (!error && response.statusCode == 200) {
@@ -288,6 +288,7 @@ function writingToEndPoint(startFrom) {
 	console.log(start);
 	asyncLoop(start, function(loop) {
 		var l = loop.index;
+		console.log(links[l]);
 		console.log(l);
 		request(links[l], function(error, response, body) {
 			if (!error && response.statusCode == 200) {
@@ -302,26 +303,71 @@ function writingToEndPoint(startFrom) {
 					console.log(patternArr);
 					var results = [];
 					for (var z = 0; z < patternArr.length; z++) {
-						var temp = $(patternArr[z].replace(/>/g, " "));
-						//console.log($._root.children);
-						for (var y = 0; y < temp.length; y++) {
-							results.push(temp[y]);
+						if(get.method == "asos"){
+						//title, imgUrl, description, category,price
+							if(get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductPrice"){
+								var temp=$(patternArr[z].replace(/>/g, " "));
+								console.log(temp[0].children[0].data.substring(6,temp[0].children[0].data.length));
+							} 
+							if(get.finalSearch[m] == "#ctl00_ContentMainPage_imgMainImage"){
+								var temp=$(patternArr[z].replace(/>/g, " "));
+								console.log(temp[0].attribs.src);
+							}
+							if(get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductTitle"){
+								
+								var temp=$(patternArr[z].replace(/>/g, " "));
+								//console.log(temp[0].children);
+								var ans = "";
+								for(var i in temp[0].children){
+									if(temp[0].children[i].type == "text"){
+										if(ans.length > 0){ans+=","}
+										ans += temp[0].children[i].data;
+									}
+								}
+								console.log(ans);
+							}
+							if(get.finalSearch[m] == ".single-entry"){
+								var temp2=$(patternArr[z].replace(/>/g, " "))
+								var string = "";
+								for(var i in temp2[0].children){
+									if(temp2[0].children[i].name=='a'){
+										string = temp2[0].children[i].attribs.href;
+										break;
+										
+									}
+								}
+								console.log(string.split("/")[2]);
+					console.log(")__________________________________()")
+
+								var temp=$(patternArr[z].replace(/>/g, " ")).html();
+								console.log(temp);
+							}
+						}
+						if(get.method == "generic"){
+							var temp = $(patternArr[z].replace(/>/g, " "));
+							//console.log($._root.children);
+							for (var y = 0; y < temp.length; y++) {
+								results.push(temp[y]);
+							}
 						}
 					}
 					//results = eliminateDuplicates(results);
 					//console.log(results[0].children);
 					for (var n = 0; n < results.length; n++) {
-						//console.log(results[n]);
+						console.log(results[n]);
 						//console.log(results[n].children[0].data);
-						if ("children" in results[n] && results[n].children.length > 0) {
-							if ("data" in results[n].children[0]) {
-							
-									if (resultString.length > 0 && resultString[resultString.length - 1] != ",") {
-										resultString += ",";
-									}
-									resultString += results[n].children[0].data;
-									console.log(results[n].children[0].data);
+						
+						if(get.method == "generic"){
+							if ("children" in results[n] && results[n].children.length > 0) {
+								if ("data" in results[n].children[0]) {
 								
+										if (resultString.length > 0 && resultString[resultString.length - 1] != ",") {
+											resultString += ",";
+										}
+										resultString += results[n].children[0].data;
+										console.log(results[n].children[0].data);
+									
+								}
 							}
 						}
 					}
