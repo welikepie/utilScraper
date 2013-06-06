@@ -298,20 +298,24 @@ function writingToEndPoint(startFrom) {
 				var text = body;
 				$ = cheerio.load(text);
 				var resultString = "";
+				var results = [];
+					
 				for (var m = 0; m < get.finalSearch.length; m++) {
 					var patternArr = parseElements(get.finalSearch[m]);
 					console.log(patternArr);
-					var results = [];
+											//price,imageUrl,title,category,description
+
 					for (var z = 0; z < patternArr.length; z++) {
 						if(get.method == "asos"){
-						//title, imgUrl, description, category,price
 							if(get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductPrice"){
 								var temp=$(patternArr[z].replace(/>/g, " "));
-								console.log(temp[0].children[0].data.substring(6,temp[0].children[0].data.length));
+								//console.log(temp[0].children[0].data.substring(6,temp[0].children[0].data.length));
+								results.push(temp[0].children[0].data.substring(6,temp[0].children[0].data.length));
 							} 
 							if(get.finalSearch[m] == "#ctl00_ContentMainPage_imgMainImage"){
 								var temp=$(patternArr[z].replace(/>/g, " "));
-								console.log(temp[0].attribs.src);
+								//console.log(temp[0].attribs.src);
+								results.push(temp[0].attribs.src);
 							}
 							if(get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductTitle"){
 								
@@ -324,7 +328,7 @@ function writingToEndPoint(startFrom) {
 										ans += temp[0].children[i].data;
 									}
 								}
-								console.log(ans);
+								results.push(ans);
 							}
 							if(get.finalSearch[m] == ".single-entry"){
 								var temp2=$(patternArr[z].replace(/>/g, " "))
@@ -332,15 +336,16 @@ function writingToEndPoint(startFrom) {
 								for(var i in temp2[0].children){
 									if(temp2[0].children[i].name=='a'){
 										string = temp2[0].children[i].attribs.href;
-										break;
-										
+										break;		
 									}
 								}
-								console.log(string.split("/")[2]);
-					console.log(")__________________________________()")
+								//console.log(string.split("/")[2]);
+								results.push(string.split("/")[2]);
+								//console.log(")__________________________________()")
 
 								var temp=$(patternArr[z].replace(/>/g, " ")).html();
-								console.log(temp);
+								//console.log(temp);
+								results.push(temp);
 							}
 						}
 						if(get.method == "generic"){
@@ -351,10 +356,11 @@ function writingToEndPoint(startFrom) {
 							}
 						}
 					}
+					//console.log(results.length);
 					//results = eliminateDuplicates(results);
 					//console.log(results[0].children);
 					for (var n = 0; n < results.length; n++) {
-						console.log(results[n]);
+						//console.log(results[n]);
 						//console.log(results[n].children[0].data);
 						
 						if(get.method == "generic"){
@@ -372,7 +378,9 @@ function writingToEndPoint(startFrom) {
 						}
 					}
 				}
-				console.log(resultString);
+				console.log(results);
+				console.log(results.length);
+//				console.log(resultString);
 				if (get.writeToDB == true) {
 					console.log("happening");
 					if (resultString != "") {
