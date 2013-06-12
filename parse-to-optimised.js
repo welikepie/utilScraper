@@ -1,8 +1,9 @@
-var fs = require('fs');
-var get = require('./config.json');
-var mysql = require('mysql');
-var Q = require('q');
-var _ = require('lodash');
+var fs = require('fs'),
+    get = require('./config.json'),
+    mysql = require('mysql'),
+    cheerio = require('cheerio'),
+    Q = require('q'),
+    _ = require('lodash');
 
 var connection = mysql.createConnection({
 	host : get.db.host,
@@ -36,7 +37,8 @@ query('SELECT * FROM fashionItemsUK LIMIT 2400')
 
 		_.each(results[0], function (row) {
 
-			var temp, obj = {};
+			var i, j, temp,
+				obj = {};
 
 			// Extract product ID; if ID is successfully extracted,
 			// we're dealing with an actual product here.
@@ -63,9 +65,125 @@ query('SELECT * FROM fashionItemsUK LIMIT 2400')
 						else { return ''; }
 					}());
 					obj.name = row.title;
-					obj.description = (row.description && row.description.length && (row.description !== 'null') ? row.description : null);
 					obj.image = row.image;
 					obj.price = parseFloat(row.price);
+
+					// Parse the description and sanitise the HTML
+					if (
+						row.description &&
+						row.description.length &&
+						(row.description.toLowerCase() !== 'null') &&
+						(row.description.toLowerCase() !== 'undefined')
+					) {
+
+						// TEXT-BASED PROCESSING
+						// First, split the description by double line breaks.
+						// Those are used instead of proper paragraphs and we shall
+						// return the natural way of things.
+						var chunk,
+							list_start = null,
+							list_detected = false,
+							chunk_before, chunk_after, list_chunk;
+
+						// Those lines here replace some bizarre apostrophes and quotes
+						// (which seem to be giving PHP some trouble parsing into JSON)
+						// with generic equivalent, before splitting along two-line breaks.
+						temp = row.description
+							.replace(/‘|’|’|’/g, '&quot;')
+							.replace(/“|”/g, "'")
+							.split('<br><br>');
+
+						for (i = 0; i < temp.length; i += 1) {
+
+							// Split each chunk by linebreaks, then reduce whitespace,
+							// trim redundant spaces and remove empty text nodes.
+							// This will ensure proper quality and reduce chance of
+							// badly-looking description.
+							chunk = _(temp[i].split('<br>'))
+								.map(function (str) {
+									return str
+										.replace(/^\s+|\s+$/g, '')    // trimming
+										.replace(/\s+/g, ' '); // whitespace reduction
+								})
+								.compact()
+								.value();
+
+							// Traverse description in search of lists.
+							// These are provided as mere linebreaks with hyphens,
+							// whereas parsing and styling is easier if they're made
+							// into proper lists;
+							list_indicators = [];
+							for (j = 0; j <= chunk.length; j += 1) {
+								if ((typeof chunk[j] === 'undefined') || !chunk[j].match(/^\- /)) {
+									if (list_detected) {
+										list_detected = false;
+										list_indicators.push([list_start, j]);
+									}
+								} else {
+									if (!list_detected) {
+										list_start = j;
+										list_detected = true;
+									}
+								}
+							}
+
+							// If there were no lists detected, return the chunk as it is.
+							// Otherwise, proceed with splitting them out of the chunk.
+							if (!list_indicators.length) {
+								temp[i] = chunk.join('<br>');
+							} else {
+								var result = [];
+								list_indicators = _.flatten([0, list_indicators, chunk.length]);
+								for (j = 1; j < list_indicators.length; j += 1) {
+									if (j % 2) {
+										result.push(chunk.slice(list_indicators[j - 1], list_indicators[j]).join('<br>'));
+									} else {
+										result.push('<ul>' + _.map(chunk.slice(list_indicators[j - 1], list_indicators[j]), function (line) {
+											return '<li>' + line.substr(2) + '</li>';
+										}).join('') + '</ul>');
+									}
+								}
+								temp[i] = _.compact(result);
+							}
+
+						}
+						// Once the chunks have been processed,
+						// wrap each in a paragraph and join them together.
+						temp = _(temp)
+							.flatten()
+							.map(function (chunk) { return '<p>' + chunk + '</p>'; })
+							.value().join('');
+
+						// PARSER-BASED PROCESSING
+						var $ = cheerio.load(temp, {'ignoreWhitespace': true});
+
+						// Remove all links that are not absolute
+						$('a').each(function (index, el) {
+							if (!(
+								el.attribs &&
+								el.attribs.href &&
+								el.attribs.href.match(/^[a-z0-9]+:\/\//)
+							)) { this.replaceWith(this.html()); }
+						});
+
+						// Extract lists from single-child paragraphs
+						$('ul').each(function (index, el) {
+							if ((el.prev === null) && (el.next === null)) {
+								$(el.parent).replaceWith($(el));
+							}
+						});
+
+						// Reparse the titles
+						$('strong').each(function (index, el) {
+							if (el.next && el.next.type === 'tag' && el.next.tag === 'br') {
+								$(el.parent).before('<h3>' + this.html() + '</h3>');
+								$(el.next).remove();
+							}
+						});
+
+						obj.description = $.html();
+
+					} else { obj.description = null; }
 
 					intermediate[obj.id] = obj;
 
