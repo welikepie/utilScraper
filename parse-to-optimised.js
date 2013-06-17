@@ -29,7 +29,7 @@ console.log('Starting the conversion...\n==============\n')
 
 query('SELECT * FROM fashionItemsUK LIMIT 2400')
 	.then(function (results) {
-
+		console.log(results);
 		console.log('Retrieved raw data, processing...');
 
 		var intermediate = {},

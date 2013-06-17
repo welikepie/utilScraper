@@ -4,6 +4,7 @@
 -- Gender for which the product is designated (can be null, indicating no preference),
 -- title and description, as well as URL to the image.
 -- Categories and prices are in separate, linked tables and URL can be easily reconstructed.
+
 CREATE TABLE `products` (
   `id` bigint(20) unsigned NOT NULL,
   `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,

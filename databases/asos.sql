@@ -18,7 +18,8 @@ CREATE  TABLE IF NOT EXISTS `asos`.`fashionItemsUK` (
   `title` VARCHAR(140) NULL ,
   `image` VARCHAR(200) NULL ,
   `url` VARCHAR(400) NOT NULL ,
-  `timestamp` VARCHAR(45) NULL )
+  `timestamp` VARCHAR(45) NULL,
+  PRIMARY KEY (url) )
 ENGINE = InnoDB;
 
 USE `asos` ;
