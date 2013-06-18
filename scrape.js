@@ -1,4 +1,4 @@
-var cheerio = require('cheerio'), get = require('./config.json'), mysql = require('mysql'), fs = require('fs'), request = require('request'), Q = require('q'), _ = require('lodash');
+var cheerio = require('cheerio'), get = require('./config.json'), mysql = require('mysql'), fs = require('fs'), request = require('request'), Q = require('q'), _ = require('lodash'), htmlencode = require('htmlencode');
 
 var diff;
 var timeStamp = 0;
@@ -22,7 +22,7 @@ var connection = mysql.createConnection(
 	"password" : get.db.pass,
 	"database" : get.db.dbName
 });
-if(get.method == "asos"){
+if (get.method == "asos") {
 	var query = Q.nbind(connection.query, connection);
 }
 // This bit here allows the usage of ":name" placeholder format in queries
@@ -316,6 +316,16 @@ function writingToEndPoint(startFrom) {
 	console.log(startFrom);
 	console.log(links.length);
 	var jsonResults = [];
+	console.log("stuff");
+	var arr = [];
+	for (var i = 0; i < links.length; i++) {
+		if (links[i].indexOf("sgid") != -1) {
+			arr.push(links[i]);
+		}
+	}
+	links = arr;
+	console.log(arr);
+	//	return 0;
 	asyncLoop(start, function(loop) {
 		var l = loop.index;
 		console.log(links[l + startFrom]);
@@ -341,18 +351,112 @@ function writingToEndPoint(startFrom) {
 				var resultString = "";
 				var results = "";
 				var resultsJson = {};
-				resultsJson.url = links[l + startFrom];
+				if(get.method=="asos"){
+					var localJson = [{},{}];
+				}
 				for (var m = 0; m < get.finalSearch.length; m++) {
 					var patternArr = parseElements(get.finalSearch[m]);
+					
 					//console.log(patternArr);
 					//price,imageUrl,title,category,description
-
 					for (var z = 0; z < patternArr.length; z++) {
-						if (get.method == "asos") {
-
+						if (get.method == "asos"){
 							if (links[l + startFrom].indexOf("sgid") != -1) {
-								//console.log(links[l+startFrom]+"/n");
+								var insert = $(".content_more_info");
+								var sgid = links[l+startFrom].match(/sgid=([0-9]+)/)[0];
+								for (var y = 0; y < 2; y++) {
+									var popup = htmlencode.htmlDecode(insert[y].children[0].data).split('\',\'');
+									var desc = "null";
+									var image = "null";
+									var iid = "null";
+									if(popup.length > 2){
+										desc = popup[1];
+										image = popup[2];
+										iid = "iid="+image.match(/[0-9]{4,}/);
+									}
+									localJson[y].url = "http://www.asos.com/pgeproduct.aspx?"+sgid+"&"+iid;
+									//console.log(links[l+startFrom]+"/n");
+
+									if (get.finalSearch[m] == "#ctl00_ContentMainPage_divmor>ul>li>a") {
+										var temp = $(patternArr[z].replace(/>/g, " "));
+										if (temp.length > 0) {
+											localJson[y].gender = temp[0].children[0].data;
+										} else {
+											localJson[y].gender = "null";
+										}
+									}
+									if (get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductPrice") {
+										var temp = $(".product_price_details")[y].children[0].data;
+											if (temp != null) {
+												//console.log(temp[0].children[0]);
+												localJson[y].price = parseFloat(temp.substring(6, temp.length));
+											}
+										 else {
+											localJson[y].price = "null";
+										}
+									}
+									if (get.finalSearch[m] == "#ctl00_ContentMainPage_imgMainImage") {
+										localJson[y].image = image;
+									}
+									if (get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductTitle") {
+										//title
+										var temp = $(".title h1 span")[y].children
+										if(temp.length == 1){
+											localJson[y].title = temp[0].data;
+										}
+										else{
+											localJson[y].title = temp[1].data
+										}
+										if(temp.length == 0){
+											localJson[y].title = "null";
+										}
+										
+									}
+									if (get.finalSearch[m] == "#ctl00_ContentMainPage_divmor>ul>li") {
+										var temp2 = $(patternArr[z].replace(/>/g, " "))
+										if (temp2 != null) {
+											if (temp2.length == 0) {
+												localJson[y].category = "null";
+											} else {
+												logger = [];
+												for (var i = 0; i < temp2.length; i++) {
+													logger.push(temp2[i].children[4].children[0].data);
+												}
+												//console.log(logger);
+												if (logger.length == 0) {
+													localJson[y].category = "null";
+												} else {
+													logger = eliminateDuplicates(logger);
+
+													//console.log(logger);
+													var string = "";
+													for (var i in logger) {
+														if (string.length > 0) {
+															string += "/";
+														}
+														string += logger[i];
+													}
+													//console.log(string);
+													localJson[y].category = string;
+												}
+											}
+										} else {
+											localJson[y].category = "null";
+										}
+									}
+									if (get.finalSearch[m] == ".single-entry") {
+										localJson[y].description = desc;
+									}
+
+									if (get.db.addTimestamp == true) {
+										localJson[y].timestamp = Math.round(new Date().getTime() / 1000);
+									}
+									if (get.db.addTimestamp == true) {
+										localJson[y].timestamp = Math.round(new Date().getTime() / 1000);
+									}
+								}
 							} else {
+								resultsJson.url = links[l + startFrom];
 								if (get.finalSearch[m] == "#ctl00_ContentMainPage_divmor>ul>li>a") {
 									var temp = $(patternArr[z].replace(/>/g, " "));
 									if (temp.length > 0) {
@@ -459,11 +563,11 @@ function writingToEndPoint(startFrom) {
 											resultsJson.description = temp;
 										}
 									} else {
-										resultsJson.description="null";
+										resultsJson.description = "null";
 									}
 								}
-								if(		get.db.addTimestamp == true){
-									resultsJson.timestamp =  Math.round(new Date().getTime() / 1000);
+								if (get.db.addTimestamp == true) {
+									resultsJson.timestamp = Math.round(new Date().getTime() / 1000);
 								}
 							}
 							if (get.method == "generic") {
@@ -480,7 +584,17 @@ function writingToEndPoint(startFrom) {
 						}
 					}
 				}
-				jsonResults.push(resultsJson);
+				//console.log(localJson);
+				//return 0;
+				if(get.method == "asos"){
+					if (links[l + startFrom].indexOf("sgid") != -1){
+						jsonResults.push(localJson[0]);
+						jsonResults.push(localJson[1]);	
+					}
+					else{
+						jsonResults.push(resultsJson);
+					}
+				}
 				//console.log(results.length);
 
 				//results = eliminateDuplicates(results);
@@ -508,7 +622,9 @@ function writingToEndPoint(startFrom) {
 				//console.log(resultString);
 				//console.log(get.writeToDB + "," + get.method);
 				if (get.writeToDB == true && get.method == "asos" && jsonResults.length >= resultSpacing || l == links.length) {
-					Q.fcall(function(){return jsonResults;}).then(function(results) {
+					Q.fcall(function() {
+						return jsonResults;
+					}).then(function(results) {
 						console.log('Retrieved raw data, processing...');
 
 						var intermediate = {}, categories = [];
@@ -548,7 +664,13 @@ function writingToEndPoint(startFrom) {
 									obj.name = row.title;
 									obj.image = row.image;
 									obj.price = parseFloat(row.price);
-
+									
+									if(row.url.match(/sgid=([0-9]+)/) != null){
+										obj.sgid = parseInt(row.url.match(/sgid=([0-9]+)/)[1],10);
+									}
+									else{
+										obj.sgid = -1;
+									}
 									// Parse the description and sanitise the HTML
 									if (row.description && row.description.length && (row.description.toLowerCase() !== 'null') && (row.description.toLowerCase() !== 'undefined')) {
 
@@ -670,7 +792,7 @@ function writingToEndPoint(startFrom) {
 						return [categories, intermediate];
 
 					}).then(function(data) {
-
+					console.log(data);
 						// Insert each category into the DB to ensure they will have
 						// appropriate IDs when the products are inserted.
 						console.log('Finished processing data. Inserting missing categories into DB...');
@@ -697,31 +819,30 @@ function writingToEndPoint(startFrom) {
 
 							promise = promise.then(function() {
 								return Q.all(_.map(product_group, function(product) {
-									return query('INSERT INTO products (' +
-									 'id, timestamp, gender, ' 
-									 + 'name, image, description' + 
-									 ') VALUES (' 
-									 + ':id, FROM_UNIXTIME(:timestamp), :gender, '
-									  + ':name, :image, :description' 
-									  + ') ON DUPLICATE KEY UPDATE id = :id, timestamp = FROM_UNIXTIME(:timestamp),gender=:gender, name = :name, description = :description', product).then(function() {
+									return query('INSERT INTO products (' + 'id, timestamp, gender, ' + 'name, image, description' + ') VALUES (' + ':id, FROM_UNIXTIME(:timestamp), :gender, ' + ':name, :image, :description' + ') ON DUPLICATE KEY UPDATE id = :id, timestamp = FROM_UNIXTIME(:timestamp),gender=:gender, name = :name, description = :description', product).then(function() {
 										// Once the main product is in, insert the price
 										// (assume GBP as currency for now)
-										return query('INSERT INTO product_prices (product_id, currency, price) ' + 'VALUES (:id, \'GBP\', :price)'+
-										'ON DUPLICATE KEY UPDATE product_id = :id, currency = \'GBP\', price=:price' , product);
+										return query('INSERT INTO product_prices (product_id, currency, price) ' + 'VALUES (:id, \'GBP\', :price)' + 'ON DUPLICATE KEY UPDATE product_id = :id, currency = \'GBP\', price=:price', product);
 									}).then(function() {
 										// Top it all by inserting entries tying products to categories
 										// in which they might appear, one by one (though in parallel)
 										return Q.all(product.categories.map(function(category) {
-											console.log("hanging here");
-											return query('INSERT INTO product_categories (product_id, category_id) ' + 'SELECT :product_id, categories.id FROM categories ' + 'WHERE categories.name = :category', {
-												'product_id' : product.id,
-												'category' : category
-											});
-
+											//return query('')
+											return (function() {
+//												console.log(category+","+category);
+												
+												query('DELETE FROM product_categories WHERE product_id = :product_id', {
+													'product_id' : product.id
+												});
+												query('INSERT INTO product_categories (product_id, category_id) ' + 'SELECT :product_id, categories.id FROM categories ' + 'WHERE categories.name = :category', {
+													'product_id' : product.id,
+													'category' : category
+												});
+											})();
 										}));
 									}).then(function() {
 										index++;
-										console.log("Wrapping in silk at \033[1;35m" + Math.floor(100 * ((l + startFrom - (index)) / links.length)) + "%\033[0m completion. \033[1;35m" + (links.length -(index) - (l + startFrom)) + "\033[0m links remaining.");
+										console.log("Wrapping in silk at \033[1;35m" + Math.floor(100 * ((l + startFrom + (index)) / links.length)) + "%\033[0m completion. \033[1;35m" + (links.length - (index) - (l + startFrom)) + "\033[0m links remaining.");
 										console.log('Successfully written product #' + product.id + '  ( ' + (index) + ' / ' + total + ')');
 									});
 
@@ -736,11 +857,11 @@ function writingToEndPoint(startFrom) {
 						// .done() is used here instead of .then() to make sure errors are thrown if detected
 					}).done(function() {
 						fs.writeFileSync("numTracker.json", '{"data":' + (l + startFrom) + '}');
-							jsonResults = [];
-							loop.next();
+						jsonResults = [];
+						loop.next();
 					});
 
-				}else if(get.writeToDB == true && get.method == "asos" && jsonResults.length < resultSpacing){	
+				} else if (get.writeToDB == true && get.method == "asos" && jsonResults.length < resultSpacing) {
 					loop.next();
 				} else if (get.writeToDB == true) {
 					if (resultString != "") {
