@@ -101,7 +101,12 @@ setInterval(function() {
 }, timeStamp);
 
 function timed() {
-	absentConf = fs.existsSync('numTracker.json');
+	try {
+		absentConf = fs.existsSync('numTracker.json');
+	} catch(e) {
+		absentConf = false;
+		console.log(e);
+	}
 	console.log("Scraping interrupted : " + absentConf);
 	if (absentConf == true && get.recover == true) {
 		console.log("Didn't finish eating last time around!");
@@ -318,13 +323,13 @@ function writingToEndPoint(startFrom) {
 	var jsonResults = [];
 	console.log("stuff");
 	var arr = [];
-	for (var i = 0; i < links.length; i++) {
-		if (links[i].indexOf("sgid") != -1) {
-			arr.push(links[i]);
-		}
+	/*for (var i = 0; i < links.length; i++) {
+	if (links[i].indexOf("sgid") != -1) {
+	arr.push(links[i]);
+	}
 	}
 	links = arr;
-	console.log(arr);
+	console.log(arr);*/
 	//	return 0;
 	asyncLoop(start, function(loop) {
 		var l = loop.index;
@@ -351,30 +356,35 @@ function writingToEndPoint(startFrom) {
 				var resultString = "";
 				var results = "";
 				var resultsJson = {};
-				if(get.method=="asos"){
-					var localJson = [{},{}];
+				if (get.method == "asos") {
+					var localJson = [];
 				}
 				for (var m = 0; m < get.finalSearch.length; m++) {
 					var patternArr = parseElements(get.finalSearch[m]);
-					
+
 					//console.log(patternArr);
 					//price,imageUrl,title,category,description
 					for (var z = 0; z < patternArr.length; z++) {
-						if (get.method == "asos"){
+						if (get.method == "asos") {
 							if (links[l + startFrom].indexOf("sgid") != -1) {
 								var insert = $(".content_more_info");
+								//console.log(insert);
 								var sgid = links[l+startFrom].match(/sgid=([0-9]+)/)[0];
-								for (var y = 0; y < 2; y++) {
+								for (var y = 0; y < insert.length; y++) {
+									localJson.push({});
+									if ("children" in insert[y] == false) {
+										break;
+									}
 									var popup = htmlencode.htmlDecode(insert[y].children[0].data).split('\',\'');
 									var desc = "null";
 									var image = "null";
 									var iid = "null";
-									if(popup.length > 2){
+									if (popup.length > 2) {
 										desc = popup[1];
 										image = popup[2];
-										iid = "iid="+image.match(/[0-9]{4,}/);
+										iid = "iid=" + image.match(/[0-9]{4,}/);
 									}
-									localJson[y].url = "http://www.asos.com/pgeproduct.aspx?"+sgid+"&"+iid;
+									localJson[y].url = "http://www.asos.com/pgeproduct.aspx?" + sgid + "&" + iid;
 									//console.log(links[l+startFrom]+"/n");
 
 									if (get.finalSearch[m] == "#ctl00_ContentMainPage_divmor>ul>li>a") {
@@ -387,11 +397,10 @@ function writingToEndPoint(startFrom) {
 									}
 									if (get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductPrice") {
 										var temp = $(".product_price_details")[y].children[0].data;
-											if (temp != null) {
-												//console.log(temp[0].children[0]);
-												localJson[y].price = parseFloat(temp.substring(6, temp.length));
-											}
-										 else {
+										if (temp != null) {
+											//console.log(temp[0].children[0]);
+											localJson[y].price = parseFloat(temp.substring(6, temp.length));
+										} else {
 											localJson[y].price = "null";
 										}
 									}
@@ -401,16 +410,15 @@ function writingToEndPoint(startFrom) {
 									if (get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductTitle") {
 										//title
 										var temp = $(".title h1 span")[y].children
-										if(temp.length == 1){
+										if (temp.length == 1) {
 											localJson[y].title = temp[0].data;
-										}
-										else{
+										} else {
 											localJson[y].title = temp[1].data
 										}
-										if(temp.length == 0){
+										if (temp.length == 0) {
 											localJson[y].title = "null";
 										}
-										
+
 									}
 									if (get.finalSearch[m] == "#ctl00_ContentMainPage_divmor>ul>li") {
 										var temp2 = $(patternArr[z].replace(/>/g, " "))
@@ -586,12 +594,18 @@ function writingToEndPoint(startFrom) {
 				}
 				//console.log(localJson);
 				//return 0;
-				if(get.method == "asos"){
-					if (links[l + startFrom].indexOf("sgid") != -1){
+				if (get.method == "asos") {
+					if (links[l + startFrom].indexOf("sgid") != -1) {
 						jsonResults.push(localJson[0]);
-						jsonResults.push(localJson[1]);	
-					}
-					else{
+						jsonResults.push(localJson[1]);
+						var sgid = localJson[0].url.match(/sgid=([0-9]+)/)[1];
+						query("DELETE FROM product_groups WHERE group_id = :sgid", {
+							sgid : sgid
+						}).done(function() {
+							console.log("A group has been found. It's been successfully purged... for now...");
+						});
+
+					} else {
 						jsonResults.push(resultsJson);
 					}
 				}
@@ -632,7 +646,7 @@ function writingToEndPoint(startFrom) {
 						_.each(results, function(row) {
 
 							var i, j, temp, obj = {};
-
+							//console.log(row);
 							// Extract product ID; if ID is successfully extracted,
 							// we're dealing with an actual product here.
 							temp = row.url.match(/iid=([0-9]+)/);
@@ -664,11 +678,10 @@ function writingToEndPoint(startFrom) {
 									obj.name = row.title;
 									obj.image = row.image;
 									obj.price = parseFloat(row.price);
-									
-									if(row.url.match(/sgid=([0-9]+)/) != null){
-										obj.sgid = parseInt(row.url.match(/sgid=([0-9]+)/)[1],10);
-									}
-									else{
+
+									if (row.url.match(/sgid=([0-9]+)/) != null) {
+										obj.sgid = parseInt(row.url.match(/sgid=([0-9]+)/)[1], 10);
+									} else {
 										obj.sgid = -1;
 									}
 									// Parse the description and sanitise the HTML
@@ -792,12 +805,12 @@ function writingToEndPoint(startFrom) {
 						return [categories, intermediate];
 
 					}).then(function(data) {
-					console.log(data);
+						//console.log(data);
 						// Insert each category into the DB to ensure they will have
 						// appropriate IDs when the products are inserted.
 						console.log('Finished processing data. Inserting missing categories into DB...');
 						return Q.all(data[0].map(function(category) {
-							return query('INSERT IGNORE INTO categories (name) VALUES (:category)', {
+							return query('INSERT IGNORE INTO categories (name) VALUES (:category) ON DUPLICATE KEY UPDATE name = :category', {
 								'category' : category
 							});
 						})).then(function() {
@@ -819,9 +832,11 @@ function writingToEndPoint(startFrom) {
 
 							promise = promise.then(function() {
 								return Q.all(_.map(product_group, function(product) {
-									return query('INSERT INTO products (' + 'id, timestamp, gender, ' + 'name, image, description' + ') VALUES (' + ':id, FROM_UNIXTIME(:timestamp), :gender, ' + ':name, :image, :description' + ') ON DUPLICATE KEY UPDATE id = :id, timestamp = FROM_UNIXTIME(:timestamp),gender=:gender, name = :name, description = :description', product).then(function() {
+
+									return query('INSERT INTO products (' + 'id, timestamp, gender, ' + 'name, image, description' + ') VALUES (' + ':id, FROM_UNIXTIME(:timestamp), :gender, ' + ':name, :image, :description' + ') ON DUPLICATE KEY UPDATE id = :id, timestamp = FROM_UNIXTIME(:timestamp),gender=:gender, name = :name, description = :description, image = :image', product).then(function() {
 										// Once the main product is in, insert the price
 										// (assume GBP as currency for now)
+
 										return query('INSERT INTO product_prices (product_id, currency, price) ' + 'VALUES (:id, \'GBP\', :price)' + 'ON DUPLICATE KEY UPDATE product_id = :id, currency = \'GBP\', price=:price', product);
 									}).then(function() {
 										// Top it all by inserting entries tying products to categories
@@ -829,17 +844,28 @@ function writingToEndPoint(startFrom) {
 										return Q.all(product.categories.map(function(category) {
 											//return query('')
 											return (function() {
-//												console.log(category+","+category);
-												
+												//												console.log(category+","+category);
+												console.log("here");
 												query('DELETE FROM product_categories WHERE product_id = :product_id', {
 													'product_id' : product.id
-												});
-												query('INSERT INTO product_categories (product_id, category_id) ' + 'SELECT :product_id, categories.id FROM categories ' + 'WHERE categories.name = :category', {
-													'product_id' : product.id,
-													'category' : category
+												}).then(function() {
+													query('INSERT INTO product_categories (product_id, category_id) ' + 'SELECT :product_id, categories.id FROM categories ' + 'WHERE categories.name = :category', {
+														'product_id' : product.id,
+														'category' : category
+													})
 												});
 											})();
 										}));
+									}).then(function() {
+										if (product.gid != -1) {
+											//console.log(product);
+											return query('DELETE FROM product_groups WHERE group_id = :gid', {"gid":product.gid}).then(function() {
+												return query('INSERT INTO product_groups (group_id,product_id) VALUES (:gid, :iid )', {
+													"gid" : product.sgid,
+													"iid" : product.id
+												})
+											});
+										}
 									}).then(function() {
 										index++;
 										console.log("Wrapping in silk at \033[1;35m" + Math.floor(100 * ((l + startFrom + (index)) / links.length)) + "%\033[0m completion. \033[1;35m" + (links.length - (index) - (l + startFrom)) + "\033[0m links remaining.");
