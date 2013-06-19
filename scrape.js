@@ -14,14 +14,14 @@ if (get.writeToDB == true) {
 	//	}
 }
 
-var connection = mysql.createConnection(
-//'mysql://'+get.db.user+':'+get.db.pass+'@'+get.db.host+'/'+get.db.dbName+'?reconnect=true');
-{
+var connection = mysql.createConnection('mysql://'+get.db.user+':'+get.db.pass+'@'+get.db.host+'/'+get.db.dbName+'?reconnect=true');
+/*{
 	"host" : get.db.host,
 	"user" : get.db.user,
 	"password" : get.db.pass,
 	"database" : get.db.dbName
-});
+}
+);*/
 if (get.method == "asos") {
 	var query = Q.nbind(connection.query, connection);
 }
@@ -398,7 +398,8 @@ function writingToEndPoint(startFrom) {
 										var temp = $(".product_price_details")[y].children[0].data;
 										if (temp != null) {
 											//console.log(temp[0].children[0]);
-											localJson[y].price = parseFloat(temp.substring(6, temp.length));
+											console.log(temp);
+											localJson[y].price = parseFloat(temp.match(/[0-9]*[.][0-9]*/)[0]);
 										} else {
 											localJson[y].price = "null";
 										}
@@ -481,7 +482,7 @@ function writingToEndPoint(startFrom) {
 											resultsJson.price = "null";
 										} else {
 											//console.log(temp[0].children[0]);
-											resultsJson.price = parseFloat(temp[0].children[0].data.substring(6, temp[0].children[0].data.length));
+											resultsJson.price = parseFloat(temp[0].children[0].data.match(/[0-9]*[.][0-9]*/)[0]);
 										}
 									} else {
 										resultsJson.price = "null";
@@ -830,6 +831,7 @@ function writingToEndPoint(startFrom) {
 
 							promise = promise.then(function() {
 								return Q.all(_.map(product_group, function(product) {
+									console.log(product);
 									return query('INSERT INTO products (' + 'id, timestamp, gender, ' + 'name, image, description' + ') VALUES (' + ':id, FROM_UNIXTIME(:timestamp), :gender, ' + ':name, :image, :description' + ') ON DUPLICATE KEY UPDATE id = :id, timestamp = FROM_UNIXTIME(:timestamp),gender=:gender, name = :name, description = :description, image = :image', product).then(function() {
 										// Once the main product is in, insert the price
 										// (assume GBP as currency for now)

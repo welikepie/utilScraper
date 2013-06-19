@@ -12,9 +12,9 @@
 	"threshold" : "00,00,00,01,00",
 	"recover" : true,
 	"db" : {
-		"host" : "welikepie.com",
-		"user" : "alex",
-		"pass" : "Sannevanwel1j",
+		"host" : "localhost:3306",
+		"user" : "root",
+		"pass" : "alpine",
 		"dbName" : "asos",
 		"tName" : "fashionItemsUK",
 		"columns" : ["gender","price","category","description","title","image","url"],
