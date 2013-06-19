@@ -386,7 +386,6 @@ function writingToEndPoint(startFrom) {
 									}
 									localJson[y].url = "http://www.asos.com/pgeproduct.aspx?" + sgid + "&" + iid;
 									//console.log(links[l+startFrom]+"/n");
-
 									if (get.finalSearch[m] == "#ctl00_ContentMainPage_divmor>ul>li>a") {
 										var temp = $(patternArr[z].replace(/>/g, " "));
 										if (temp.length > 0) {
@@ -636,9 +635,8 @@ function writingToEndPoint(startFrom) {
 				//console.log(resultString);
 				//console.log(get.writeToDB + "," + get.method);
 				if (get.writeToDB == true && get.method == "asos" && jsonResults.length >= resultSpacing || l == links.length) {
-					Q.fcall(function() {
-						return jsonResults;
-					}).then(function(results) {
+					Q(jsonResults).then(
+						function(results) {
 						console.log('Retrieved raw data, processing...');
 
 						var intermediate = {}, categories = [];
@@ -815,7 +813,7 @@ function writingToEndPoint(startFrom) {
 							});
 						})).then(function() {
 							return data[1];
-						});
+						},function(error){console.log("INTO CAT"+error);throw error;});
 
 					}).then(function(products) {
 
@@ -832,20 +830,17 @@ function writingToEndPoint(startFrom) {
 
 							promise = promise.then(function() {
 								return Q.all(_.map(product_group, function(product) {
-
 									return query('INSERT INTO products (' + 'id, timestamp, gender, ' + 'name, image, description' + ') VALUES (' + ':id, FROM_UNIXTIME(:timestamp), :gender, ' + ':name, :image, :description' + ') ON DUPLICATE KEY UPDATE id = :id, timestamp = FROM_UNIXTIME(:timestamp),gender=:gender, name = :name, description = :description, image = :image', product).then(function() {
 										// Once the main product is in, insert the price
 										// (assume GBP as currency for now)
-
-										return query('INSERT INTO product_prices (product_id, currency, price) ' + 'VALUES (:id, \'GBP\', :price)' + 'ON DUPLICATE KEY UPDATE product_id = :id, currency = \'GBP\', price=:price', product);
-									}).then(function() {
+										return query('INSERT INTO product_prices (product_id, currency, price) ' + 'VALUES (:id, \'GBP\', :price)' + ' ON DUPLICATE KEY UPDATE product_id = :id, currency = \'GBP\', price=:price', product);
+									},function(error){console.log("INTO PRODUCTS AND PRODUCT PRICES"+error);throw error;}).then(function() {
 										// Top it all by inserting entries tying products to categories
 										// in which they might appear, one by one (though in parallel)
 										return Q.all(product.categories.map(function(category) {
 											//return query('')
 											return (function() {
 												//												console.log(category+","+category);
-												console.log("here");
 												query('DELETE FROM product_categories WHERE product_id = :product_id', {
 													'product_id' : product.id
 												}).then(function() {
@@ -853,25 +848,24 @@ function writingToEndPoint(startFrom) {
 														'product_id' : product.id,
 														'category' : category
 													})
-												});
+												},function(error){console.log("INTO PROD_CAT"+error);throw error;});
 											})();
 										}));
-									}).then(function() {
-										if (product.gid != -1) {
+									},function(error){console.log("INTO PROD, PROD_PRICE"+error);throw error;}).then(function() {
+										if (product.sgid != -1) {
 											//console.log(product);
-											return query('DELETE FROM product_groups WHERE group_id = :gid', {"gid":product.gid}).then(function() {
+											return query('DELETE FROM product_groups WHERE group_id = :gid', {"gid":product.sgid}).then(function() {
 												return query('INSERT INTO product_groups (group_id,product_id) VALUES (:gid, :iid )', {
 													"gid" : product.sgid,
 													"iid" : product.id
 												})
-											});
+											},function(error){console.log("INTO PROD,GROUPS"+error);throw error;});
 										}
 									}).then(function() {
 										index++;
 										console.log("Wrapping in silk at \033[1;35m" + Math.floor(100 * ((l + startFrom + (index)) / links.length)) + "%\033[0m completion. \033[1;35m" + (links.length - (index) - (l + startFrom)) + "\033[0m links remaining.");
 										console.log('Successfully written product #' + product.id + '  ( ' + (index) + ' / ' + total + ')');
-									});
-
+									},function(error){console.log(error);throw error;});
 								}));
 							});
 
