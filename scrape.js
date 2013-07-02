@@ -1,4 +1,4 @@
-var cheerio = require('cheerio'), get = require('./config.json'), mysql = require('mysql'), fs = require('fs'), request = require('request'), Q = require('q'), _ = require('lodash'), htmlencode = require('htmlencode');
+var cheerio = require('cheerio'), email = require('emailjs'), get = require('./config.json'), mysql = require('mysql'), fs = require('fs'), request = require('request'), Q = require('q'), _ = require('lodash'), htmlencode = require('htmlencode');
 
 var diff;
 var timeStamp = 0;
@@ -22,6 +22,15 @@ var connection = mysql.createConnection('mysql://' + get.db.user + ':' + get.db.
  "database" : get.db.dbName
  }
  );*/
+var server = email.server.connect({
+	user : "xxx@yyy.zzz",
+	password : "xxx",
+	host : "smtp.gmail.com",
+	ssl : true
+});
+
+// send the message and get a callback with an error or details of the message that was sent
+
 if (get.method == "asos") {
 	var query = Q.nbind(connection.query, connection);
 }
@@ -447,7 +456,16 @@ function writingToEndPoint(startFrom) {
 										}
 									}
 									if (get.finalSearch[m] == ".single-entry") {
-										localJson[y].description = desc;
+										if (desc != null) {
+											localJson[y].description = desc;
+										} else {
+											var descRipt = $("#ctl00_ContentMainPage_ctlSeparateProduct_divInvLongDescription").html();
+											if (descRipt != null) {
+												localJson[y].description = descRipt;
+											} else {
+												localJson[y].description = "Out of Stock";
+											}
+										}
 									}
 
 									if (get.db.addTimestamp == true) {
@@ -498,7 +516,6 @@ function writingToEndPoint(startFrom) {
 								if (get.finalSearch[m] == "#ctl00_ContentMainPage_ctlSeparateProduct_lblProductTitle") {
 
 									var temp = $(patternArr[z].replace(/>/g, " "));
-									//console.log(temp[0].children);
 									if (temp != null) {
 										if (temp.length == 0) {
 											resultsJson.title = "null";
@@ -555,7 +572,6 @@ function writingToEndPoint(startFrom) {
 
 								}
 								if (get.finalSearch[m] == ".single-entry") {
-
 									var temp = $(patternArr[z].replace(/>/g, " ")).html();
 									if (temp != null) {
 										if (temp.length == 0) {
@@ -565,7 +581,13 @@ function writingToEndPoint(startFrom) {
 											resultsJson.description = temp;
 										}
 									} else {
-										resultsJson.description = "null";
+										temp = $("#ctl00_ContentMainPage_ctlSeparateProduct_divInvLongDescription").html();
+										//console.log($(".single-entry"));
+										if (temp != null) {
+											resultsJson.description = temp;
+										} else {
+											resultsJson.description = "Out of Stock";
+										}
 									}
 								}
 								if (get.db.addTimestamp == true) {
@@ -590,16 +612,55 @@ function writingToEndPoint(startFrom) {
 				//return 0;
 				if (get.method == "asos") {
 					if (links[l + startFrom].indexOf("sgid") != -1) {
-						jsonResults.push(localJson[0]);
-						jsonResults.push(localJson[1]);
-						var sgid = localJson[0].url.match(/sgid=([0-9]+)/)[1];
-						query("DELETE FROM product_groups WHERE group_id = :sgid", {
-							sgid : sgid
-						}).done(function() {
-							console.log("A group has been found. It's been successfully purged... for now...");
-						});
+						for (var zed = 0; zed < localJson.length; zed++) {
+							console.log(localJson[zed]);
+							var counted = 0;
+							for (var thing in localJson[zed]) {
+								counted++;
+							}
+							if (counted > 0) {
+								jsonResults.push(localJson[zed]);
 
+							if (localJson[zed].description == null || localJson[zed].title == null || localJson[zed].category == null) {
+								server.send({
+									text : "Error has occurred.",
+									from : "you <alex@welikepie.com>",
+									to : "alex <alex@welikepie.com>",
+									cc : "",
+									subject : "Error occured in scraper.",
+									attachment : [{
+										data : "<html>Something died on ID " + localJson.image.match(/[0-9]{4,}/) + " with product name " + localJson[zed].title + "</html>",
+										alternative : true
+									}]
+								}, function(err, message) {
+									console.log(err || message);
+								});
+							}
+
+								var sgid = localJson[0].url.match(/sgid=([0-9]+)/)[1];
+								query("DELETE FROM product_groups WHERE group_id = :sgid", {
+									sgid : sgid
+								}).done(function() {
+									console.log("A group has been found. It's been successfully purged... for now...");
+								});
+							}
+						}
 					} else {
+						if (resultsJson.description == null || resultsJson.title == null || resultsJson.category == null) {
+							server.send({
+								text : "Error has occurred.",
+								from : "you <alex@welikepie.com>",
+								to : "alex <alex@welikepie.com>",
+								cc : "",
+								subject : "Error occured in scraper.",
+								attachment : [{
+									data : "<html>Something died on ID " + links[l + startFrom].match(/[0-9]{4,}/) + " with product name " + resultsJson.title + "</html>",
+									alternative : true
+								}]
+							}, function(err, message) {
+								console.log(err || message);
+							});
+						}
 						jsonResults.push(resultsJson);
 					}
 				}
@@ -629,7 +690,7 @@ function writingToEndPoint(startFrom) {
 				//console.log(results.length);
 				//console.log(resultString);
 				//console.log(get.writeToDB + "," + get.method);
-				if (get.writeToDB == true && get.method == "asos" && (jsonResults.length >= resultSpacing || l+startFrom == links.length-1)) {
+				if (get.writeToDB == true && get.method == "asos" && (jsonResults.length >= resultSpacing || l + startFrom == links.length - 1)) {
 					Q(jsonResults).then(function(results) {
 						console.log('Retrieved raw data, processing...');
 
@@ -641,6 +702,7 @@ function writingToEndPoint(startFrom) {
 							// console.log(row);
 							// Extract product ID; if ID is successfully extracted,
 							// we're dealing with an actual product here.
+							console.log(row.url);
 							temp = row.url.match(/iid=([0-9]+)/);
 							if (temp) {
 
@@ -688,7 +750,7 @@ function writingToEndPoint(startFrom) {
 										// Those lines here replace some bizarre apostrophes and quotes
 										// (which seem to be giving PHP some trouble parsing into JSON)
 										// with generic equivalent, before splitting along two-line breaks.
-										temp = row.description.replace(/‘|’|’|’/g, '&quot;').replace(/“|”/g, "'").split('<br><br>');
+										temp = row.description.replace(/‘|’|’|’/g, '&quot;').replace(/“|”/g, "'").replace(/–/g, "-").split('<br><br>');
 
 										for ( i = 0; i < temp.length; i += 1) {
 
@@ -962,16 +1024,15 @@ function writingToEndPoint(startFrom) {
 		})
 	}, function() {
 		cleanDB(0);
-			callFinal = !callFinal;
-			console.log(fs.existsSync('numTracker.json') + "," + fs.existsSync('links.json'));
-			if (fs.existsSync('numTracker.json')) {
-				fs.unlinkSync('numTracker.json');
-			}
-			if (fs.existsSync('links.json')) {
-				fs.unlinkSync('links.json');
-			}
-			
-		
+		callFinal = !callFinal;
+		console.log(fs.existsSync('numTracker.json') + "," + fs.existsSync('links.json'));
+		if (fs.existsSync('numTracker.json')) {
+			fs.unlinkSync('numTracker.json');
+		}
+		if (fs.existsSync('links.json')) {
+			fs.unlinkSync('links.json');
+		}
+
 	});
 }
 
@@ -1211,19 +1272,33 @@ function cleanDB(startFrom) {
 		console.log("Cleaning the web.");
 		if (get.method == "asos") {
 			var toDelete = [];
-			var deleteTimestamp = Math.round(+new Date / 1000)  -Math.floor(thresh/1000);
-			query("SELECT id, UNIX_TIMESTAMP(timestamp) FROM products WHERE timestamp < FROM_UNIXTIME(:timestamp)",{"timestamp":deleteTimestamp}).then(function(results) {
-			console.log('Retrieved raw data, deleting...');
+			var deleteTimestamp = Math.round(+new Date / 1000) - Math.floor(thresh / 1000);
+			query("SELECT id, UNIX_TIMESTAMP(timestamp) FROM products WHERE timestamp < FROM_UNIXTIME(:timestamp)", {
+				"timestamp" : deleteTimestamp
+			}).then(function(results) {
+				console.log('Retrieved raw data, deleting...');
 				var res = results[0];
-				_.each(res, function(element){
-					query("DELETE FROM products WHERE id = :element",{"element":element.id}).then(function(){
-						query("DELETE FROM product_categories WHERE product_id = :element",{"element":element.id});
-						query("DELETE FROM product_prices WHERE product_id = :element",{"element":element.id});
-						query("DELETE FROM product_groups WHERE product_id = :element",{"element":element.id});
-						},function(error){console.log("Deletion from main products table failed with error: "+error);})
-						.then(function(){"Deleting #"+element},function(error){console.log("Deletion from dependencies failed with error: "+error)})
-					});
-					console.log("finished deleting");
+				_.each(res, function(element) {
+					query("DELETE FROM products WHERE id = :element", {
+						"element" : element.id
+					}).then(function() {
+						query("DELETE FROM product_categories WHERE product_id = :element", {
+							"element" : element.id
+						});
+						query("DELETE FROM product_prices WHERE product_id = :element", {
+							"element" : element.id
+						});
+						query("DELETE FROM product_groups WHERE product_id = :element", {
+							"element" : element.id
+						});
+					}, function(error) {
+						console.log("Deletion from main products table failed with error: " + error);
+					}).then(function() {"Deleting #" + element
+					}, function(error) {
+						console.log("Deletion from dependencies failed with error: " + error)
+					})
+				});
+				console.log("finished deleting");
 			});
 		} else {
 			var linkArr = [];
